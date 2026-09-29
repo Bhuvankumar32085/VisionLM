@@ -1,0 +1,4 @@
+{"image": "data/images/red_square.jpg", "question": "What shape and color is in the center of the image?", "answer": "There is a red square in the center of the image."}
+{"image": "data/images/blue_circle.jpg", "question": "What object is visible in the image?", "answer": "A blue circle is displayed against a light background."}
+{"image": "data/images/green_box.jpg", "question": "Describe the main feature in this picture.", "answer": "The image shows a horizontal green rectangle."}
+{"image": "data/images/yellow_star.jpg", "question": "What is the bright object on the dark background?", "answer": "It is a bright yellow star centered on a dark background."}

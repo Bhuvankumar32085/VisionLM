@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Checkpoints & Logs
+checkpoints/*
+!checkpoints/.gitkeep
+runs/
+logs/
+*.log
+
+# PyTorch / Cache
+.cache/
+hf_cache/
+
+# Datasets and images (raw and processed data are kept local, not in git)
+data/raw/*
+data/processed/*
+data/cache/*
+data/subsets/images/*
+!data/subsets/*.jsonl
