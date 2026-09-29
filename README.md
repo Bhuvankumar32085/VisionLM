@@ -558,6 +558,3 @@ uv run python -m training.train --config configs/config.yaml --resume checkpoint
 ```
 
 ---
-
-## 📄 License
-This project is open-source under the [MIT License](LICENSE).
