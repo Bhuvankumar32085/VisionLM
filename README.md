@@ -1,4 +1,4 @@
-# 👁️ VisionLM: Custom Multimodal Vision-Language Model 
+# 👁️ VisionLM: Custom Multimodal Vision-Language Model
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Package Manager: UV](https://img.shields.io/badge/package_manager-UV-purple.svg)](https://github.com/astral-sh/uv)
@@ -12,16 +12,19 @@
 ## 📑 Table of Contents
 - [1. Why VisionLM (Built from First Principles)](#1-why-visionlm-built-from-first-principles)
 - [2. Complete System Architecture & Dataflow](#2-complete-system-architecture--dataflow)
-- [3. Project Directory Structure](#3-project-directory-structure)
-- [4. Hardware & Storage Requirements](#4-hardware--storage-requirements)
-- [5. Step-by-Step Installation & Quickstart](#5-step-by-step-installation--quickstart)
-- [6. Data Pipeline: Download & Preparation](#6-data-pipeline-download--preparation)
-- [7. Configuration Guide (`configs/config.yaml`)](#7-configuration-guide-configsconfigyaml)
-- [8. Real Training Benchmarks & Results (14% LLaVA Split)](#8-real-training-benchmarks--results-14-llava-split)
-- [9. Interactive Streamlit Web UI](#9-interactive-streamlit-web-ui)
-- [10. Command-Line Inference](#10-command-line-inference)
-- [11. How to Further Improve & Scale Training](#11-how-to-further-improve--scale-training)
-- [12. Troubleshooting & FAQ](#12-troubleshooting--faq)
+- [3. Understanding Training Phases (Phase 1 vs Phase 2)](#3-understanding-training-phases-phase-1-vs-phase-2)
+- [4. Project Directory Structure](#4-project-directory-structure)
+- [5. Hardware & Storage Requirements](#5-hardware--storage-requirements)
+- [6. Step-by-Step Installation & Setup](#6-step-by-step-installation--setup)
+- [7. Data Pipeline: Download & Preparation](#7-data-pipeline-download--preparation)
+- [8. Configuration Guide (`configs/config.yaml`)](#8-configuration-guide-configsconfigyaml)
+- [9. How to Train VisionLM](#9-how-to-train-visionlm)
+- [10. How to Validate After Training](#10-how-to-validate-after-training)
+- [11. Real Training Benchmarks & Results (14% LLaVA Split)](#11-real-training-benchmarks--results-14-llava-split)
+- [12. Interactive Streamlit Web UI](#12-interactive-streamlit-web-ui)
+- [13. Command-Line Inference](#13-command-line-inference)
+- [14. How to Further Improve & Scale Training](#14-how-to-further-improve--scale-training)
+- [15. Troubleshooting & FAQ](#15-troubleshooting--faq)
 
 ---
 
@@ -136,7 +139,34 @@ High-level multimodal wrappers (such as monolithic LLaVA or SmolVLM packages) ob
 
 ---
 
-## 3. Project Directory Structure
+## 3. Understanding Training Phases (Phase 1 vs Phase 2)
+
+In `configs/config.yaml`, the parameter `training.phase` controls how parameters and gradients are routed:
+
+```yaml
+training:
+  phase: projector  # Options: 'projector' (Phase 1) or 'lora' (Phase 2)
+```
+
+### 🔍 Detailed Comparison:
+
+| Feature | Phase 1: `projector` (Modality Alignment) | Phase 2: `lora` (Instruction Fine-Tuning) |
+| :--- | :--- | :--- |
+| **Status** | ✅ **Baseline Alignment (Completed)** | 🚀 **Advanced Reasoning Upgrade** |
+| **Vision Encoder (ViT)** | ❄️ **FROZEN** (`requires_grad = False`) | ❄️ **FROZEN** (`requires_grad = False`) |
+| **Language Model (SmolLM2)**| ❄️ **FROZEN** (`requires_grad = False`) | 🧠 **LoRA Trainable** (`peft` adapters active) |
+| **MLP Projector** | 🔥 **TRAINABLE** (All 2.66M parameters) | 🔥 **TRAINABLE** (Continues fine-tuning) |
+| **Trainable Parameters** | **2,656,704 (0.59% of model)** | **~7,500,000 (~1.6% of model)** |
+| **VRAM Requirement** | **~1.81 GB** (Ideal for 6GB GPUs) | **~2.6 - 3.2 GB** (Fits easily in 6GB) |
+| **Core Objective** | Teach the Projector to translate ViT image patches into SmolLM2 word embeddings | Teach the LLM to reason deeply and generate rich, structured visual answers |
+
+### Why Two Separate Phases?
+1. **Phase 1 (`projector`):** ViT outputs visual representations and SmolLM2 understands text. Neither understands the other. The MLP Projector serves as a **"translator / modality bridge"**. During Phase 1, we freeze both backbones so the projector learns to align the two modalities without destroying the language model's pre-existing reasoning capabilities.
+2. **Phase 2 (`lora`):** Once the visual modality is aligned, Phase 2 adds lightweight LoRA adapters to SmolLM2's attention projections (`q_proj`, `v_proj`, `k_proj`, `o_proj`). This enables the language model to adapt its conversational style specifically to visual question-answering.
+
+---
+
+## 4. Project Directory Structure
 
 ```
 VisionLM/
@@ -193,7 +223,7 @@ VisionLM/
 
 ---
 
-## 4. Hardware & Storage Requirements
+## 5. Hardware & Storage Requirements
 
 ### Disk Storage
 - **Current Experiment Storage:** ~**97.8 GB** (Total footprint including raw metadata, downloaded COCO image archives, extracted training images, virtual environment, and saved training checkpoints).
@@ -201,7 +231,7 @@ VisionLM/
 
 ### GPU & Compute Allocation
 - **Current Tested GPU:** NVIDIA GeForce RTX 3050 Laptop GPU (6GB VRAM, CUDA 12.4).
-- **GPU Compute Utilization:** Sustained **80% to 96%** load during training.
+- **GPU Compute Utilization:** Sustained **80% to 96%** compute core activity during training.
 - **GPU VRAM Allocation:** **~1.81 GB** out of 6.00 GB (extremely lightweight and safe from Out-Of-Memory errors).
 
 | Hardware Tier | Recommended Settings in `configs/config.yaml` | Suitability |
@@ -213,7 +243,7 @@ VisionLM/
 
 ---
 
-## 5. Step-by-Step Installation & Quickstart
+## 6. Step-by-Step Installation & Setup
 
 > [!IMPORTANT]
 > This project uses **UV** as the exclusive package manager. **Do NOT run `pip install`.**
@@ -238,7 +268,7 @@ uv run python scripts/check_gpu.py
 
 ---
 
-## 6. Data Pipeline: Download & Preparation
+## 7. Data Pipeline: Download & Preparation
 
 ### Step 1: Download LLaVA-Instruct-150K Metadata & Images
 
@@ -293,7 +323,7 @@ uv run python scripts/test_real_dataset.py
 
 ---
 
-## 7. Configuration Guide (`configs/config.yaml`)
+## 8. Configuration Guide (`configs/config.yaml`)
 
 All parameters are configured in [`configs/config.yaml`](file:///c:/Users/bhuva/OneDrive/Documents/ComputerVision/VLM_finetune/configs/config.yaml). Edit this file according to your machine:
 
@@ -357,9 +387,86 @@ inference:
 
 ---
 
-## 8. Real Training Benchmarks & Results (14% LLaVA Split)
+## 9. How to Train VisionLM
 
-The following metrics were achieved during our baseline Phase 1 projector alignment run:
+### 1. Launch Training
+To start model training with your configuration:
+
+```powershell
+uv run python -m training.train --config configs/config.yaml
+```
+
+*(Or alternatively: `uv run python main.py train --config configs/config.yaml`)*
+
+### 2. What Happens During Training:
+- Model loads ViT and SmolLM2 weights, freezing their gradients.
+- Automatic Mixed Precision (`bfloat16`) is enabled for maximum GPU throughput.
+- Every `logging_steps: 10`, terminal logs show:
+  ```
+  Epoch 1/3 | Step 500/25712 | Avg Loss: 2.1450 | LR: 9.85e-05 | Time: 0.178s | GPU Mem: 1811.2 MB
+  ```
+- Every `eval_steps: 500`, the model runs on the validation split and saves `checkpoints/checkpoint_best.pt` whenever validation loss improves.
+
+### 3. Resuming Interrupted Training
+If training stops or gets interrupted, pass the `--resume` flag to continue seamlessly:
+
+```powershell
+uv run python -m training.train --config configs/config.yaml --resume checkpoints/checkpoint_step_15000.pt
+```
+
+---
+
+## 10. How to Validate After Training
+
+Once training completes, use the dedicated validation utility to evaluate the trained weights on unseen validation data:
+
+### 1. Run Quantitative & Qualitative Validation
+```powershell
+uv run python scripts/validate_model.py --checkpoint checkpoints/checkpoint_best.pt
+```
+
+*(Or via unified CLI: `uv run python main.py validate --checkpoint checkpoints/checkpoint_best.pt`)*
+
+### 2. Validation Output & Metrics Explained:
+
+```
+=================================================================
+VLM MODEL POST-TRAINING VALIDATION
+=================================================================
+Device:          cuda:0
+Checkpoint Path: checkpoints/checkpoint_best.pt
+Validation File: data/processed/validation.jsonl
+=================================================================
+
+----------------------------------------
+QUANTITATIVE RESULTS
+----------------------------------------
+Total Validation Samples: 700
+Validation Loss:          1.7223
+Validation Perplexity:    5.60
+----------------------------------------
+
+[3/3] Generating Qualitative Visual QA Responses...
+=================================================================
+
+[Sample #1]
+Question:         Describe what is happening in this photo.
+Generated Answer: The image shows a group of people playing baseball on a green field...
+Ground Truth:     Several players are engaged in an active baseball game on a sunny day...
+-----------------------------------------------------------------
+=================================================================
+VALIDATION COMPLETE
+=================================================================
+```
+
+- **Validation Loss (`1.7223`):** Measures the average cross-entropy loss on target answer tokens across unseen images. Lower is better.
+- **Validation Perplexity (`5.60`):** Calculated as $e^{\text{loss}}$. Perplexity dropped from $\sim 15.0$ down to $5.60$, demonstrating high confidence and strong visual-language alignment.
+
+---
+
+## 11. Real Training Benchmarks & Results (14% LLaVA Split)
+
+The following benchmark was achieved during our baseline Phase 1 projector alignment run:
 
 ### 🏆 Benchmark Results
 
@@ -381,7 +488,7 @@ The following metrics were achieved during our baseline Phase 1 projector alignm
 
 ---
 
-## 9. Interactive Streamlit Web UI
+## 12. Interactive Streamlit Web UI
 
 VisionLM includes a modern, glassmorphic dark-mode web application for testing custom images:
 
@@ -399,7 +506,7 @@ uv run streamlit run app.py
 
 ---
 
-## 10. Command-Line Inference
+## 13. Command-Line Inference
 
 You can also run autoregressive multimodal generation directly from the terminal:
 
@@ -419,7 +526,7 @@ uv run python inference/generate.py \
 
 ---
 
-## 11. How to Further Improve & Scale Training
+## 14. How to Further Improve & Scale Training
 
 1. **Scale to 100% LLaVA Dataset:**
    - Download the full dataset (`uv run python scripts/download_dataset.py --splits all --workers 16`).
@@ -436,7 +543,7 @@ uv run python inference/generate.py \
 
 ---
 
-## 12. Troubleshooting & FAQ
+## 15. Troubleshooting & FAQ
 
 ### Q1: `CUDA available: False` after cloning?
 **Fix:** Run `uv sync`. This ensures the official PyTorch CUDA 12.4 wheel index is downloaded rather than CPU-only wheels.
